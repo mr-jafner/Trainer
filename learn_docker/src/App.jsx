@@ -574,7 +574,7 @@ const ReferenceModal = ({ onClose }) => {
         </div>
 
         {/* Section tabs */}
-        <div className="flex gap-2 mb-4 overflow-x-auto" role="tablist">
+        <div className="flex flex-wrap gap-2 mb-4" role="tablist">
           {referenceData.sections.map(section => (
             <button
               key={section.id}

@@ -14,11 +14,88 @@ export const curriculum = {
     color: '#0ea5e9',
     icon: '🧠',
     modules: [
+
+{
+  id: 'mm-00',
+  title: 'Cheat Sheet: 5 Things to Remember',
+  type: 'conceptmap',
+  why: 'This is a one-page mental compression: relationships and “rules of thumb” you can recall under pressure.',
+  pitfalls: [
+    'Treating it like a tutorial — it’s a map, not a movie.',
+    'Trying to memorize commands without the mental model.',
+  ],
+  content: {
+    central: 'Docker Cheat Sheet (v0)',
+    description: 'Atoms (terms) live in the reference panel. This page is the relationships.',
+    branches: [
+      {
+        id: 'mm-00-image',
+        label: 'Image vs Container',
+        color: '#22c55e',
+        details: 'Image = template (read-only layers). Container = running instance (adds a writable layer).',
+        example: 'Deleting a container deletes its writable layer; volumes persist.',
+        children: [
+          'Image: immutable snapshot of filesystem + metadata',
+          'Container: a process + mounts + network + writable layer',
+          'Volume: persistent data outside the container layer',
+        ],
+      },
+      {
+        id: 'mm-00-build',
+        label: 'Build vs Run',
+        color: '#0ea5e9',
+        details: 'Build creates an image (layers + cache). Run creates a container (mounts + networking + PID 1).',
+        example: 'Build problems: Dockerfile, context, caching. Run problems: env, ports, volumes, permissions.',
+        children: [
+          'Build: docker build → image',
+          'Run: docker run / compose up → container',
+          '“Works in build” ≠ “works at runtime” (missing env, wrong ports, mounts)',
+        ],
+      },
+      {
+        id: 'mm-00-cache',
+        label: 'Layer Caching',
+        color: '#a855f7',
+        details: 'Cache hits happen when a step’s inputs are unchanged. Order Dockerfile steps to keep expensive steps stable.',
+        example: 'Copy package.json → install deps → then copy the rest of the source.',
+        children: [
+          'Put “rarely changes” steps first',
+          'Use .dockerignore to shrink context',
+          'Multi-stage builds keep runtime images small',
+        ],
+      },
+      {
+        id: 'mm-00-vol',
+        label: 'Persistence',
+        color: '#f59e0b',
+        details: 'Containers are cattle; volumes are memory. Bind mounts = host path. Named volumes = Docker-managed.',
+        example: 'Databases usually use named volumes.',
+        children: [
+          'Bind mount: ./src:/app/src (great for dev)',
+          'Named volume: pgdata:/var/lib/postgresql/data',
+          'Do not mount over /app unless you mean to replace image contents',
+        ],
+      },
+      {
+        id: 'mm-00-net',
+        label: 'Networking',
+        color: '#ef4444',
+        details: 'Host port mapping exposes a container port to the host. Inside a Compose network, services talk by name.',
+        example: 'Host uses localhost:8080; containers use http://web:80 or db:5432.',
+        children: [
+          'Bridge: default; containers get private IPs',
+          'Port mapping: -p 8080:80 (host:container)',
+          'Compose DNS: service name becomes hostname',
+        ],
+      },
+    ],
+  },
+},
       {
         id: 'mm-01',
         title: 'What Is a Container, Really?',
         type: 'conceptmap',
-        why: "This replaces the vague "lightweight VM" idea with a kernel-level mental model. You’ll use it any time a container behaves "weird" (processes, files, networking, permissions).",
+        why: 'This replaces the vague "lightweight VM" idea with a kernel-level mental model. You’ll use it anytime Docker behaves "weird" (processes, files, networking, permissions).',
         pitfalls: [
           "Assuming a container is a VM — you’ll reach for VM fixes (and miss the real cause).",
           "Forgetting “container == process” — PID 1 behavior surprises you (signals, exit codes).",
@@ -674,205 +751,326 @@ export const curriculum = {
     color: '#ef4444',
     icon: '🧯',
     modules: [
+{
+  id: 'ft-01',
+  title: 'Container Won’t Start',
+  type: 'faulttree',
+  why: 'A container “not starting” usually means PID 1 exits, crashes, or gets killed. This tree forces you to classify the bucket first so you stop guessing.',
+  pitfalls: [
+    'Staring at the Dockerfile when the problem is runtime config (ports, env, mounts).',
+    'Ignoring exit code + logs — they are the clue.',
+    'Debugging the wrong container — confirm which one Compose actually started.',
+  ],
+  content: {
+    root: 'Container exits immediately / keeps restarting / never becomes healthy',
+    branches: [
       {
-        id: 'ft-01',
-        title: 'Container Won’t Start',
-        type: 'faulttree',
-        why: "This is your triage flow for “it exits immediately” and “it restarts forever.” Debugging gets dramatically faster when you classify the failure bucket first.",
-        pitfalls: [
-          "Staring at the Dockerfile when the error is runtime config (ports, env, mounts).",
-          "Ignoring exit code and logs — they’re the whole clue.",
-          "Debugging the wrong container — confirm which one Compose actually started."
+        fault: 'Debug ladder (do this first)',
+        icon: 'info',
+        causes: [
+          {
+            cause: '1) Is it running? Which one?',
+            detail: 'Confirm the container you think is failing is the one actually failing.',
+            fix: 'docker ps -a  (or: docker compose ps)  → note STATUS, exit code, restart count.'
+          },
+          {
+            cause: '2) What did it say?',
+            detail: 'Logs + exit code are your fastest signal.',
+            fix: 'docker logs <ctr> --tail=200  → then: docker inspect <ctr> (State.ExitCode, State.Error, Health).'
+          },
+          {
+            cause: '3) Can you reproduce interactively?',
+            detail: 'Drop into the image to remove Compose/env/entrypoint variables.',
+            fix: 'docker run --rm -it --entrypoint sh <image>  (or bash)  → run the command manually.'
+          },
+          {
+            cause: '4) Reduce variables',
+            detail: 'Disable mounts, remove ports, use minimal env, then add pieces back one at a time.',
+            fix: 'Temporarily comment out volumes/ports in compose.yml; add back after it starts cleanly.'
+          },
         ],
-        content: {
-          root: 'Container exits immediately / keeps restarting',
-          branches: [
-            {
-              fault: 'Process lifecycle',
-              icon: 'error',
-              causes: [
-                {
-                  cause: 'PID 1 command exits',
-                  detail: 'Your main process finished (or crashed). Containers stop when PID 1 exits.',
-                  fix: 'Check: docker logs <ctr>. Verify CMD/ENTRYPOINT. For shells, prefer exec form. For servers, ensure it stays in foreground.'
-                },
-                {
-                  cause: 'Signal handling / PID 1 quirks',
-                  detail: 'PID 1 ignores some signals by default and can fail to reap zombies. This can cause odd shutdown behavior.',
-                  fix: 'Use exec-form ENTRYPOINT/CMD. Consider a tiny init (e.g., tini) for long-running multi-process containers.'
-                },
-              ],
-            },
-            {
-              fault: 'Runtime configuration',
-              icon: 'warning',
-              causes: [
-                {
-                  cause: 'Missing/invalid env vars',
-                  detail: 'App crashes on startup because required config is missing (DB URL, API keys, etc.).',
-                  fix: 'Print env expectations in logs. In Compose, set env properly. Validate config at startup with clear errors.'
-                },
-                {
-                  cause: 'Mount hides required files',
-                  detail: 'A bind mount over /app replaces what was in the image. Your start script or dependencies disappear.',
-                  fix: 'Confirm mounts: docker inspect <ctr>. Avoid mounting over critical paths. Mount subdirectories instead.'
-                },
-                {
-                  cause: 'Port already in use on host',
-                  detail: 'Publishing host port fails or container starts but you can’t bind the port.',
-                  fix: 'Change host port (-p 8081:80). Find offenders: lsof -i :8080 (host) or stop the conflicting service.'
-                },
-              ],
-            },
-            {
-              fault: 'Filesystem & permissions',
-              icon: 'warning',
-              causes: [
-                {
-                  cause: 'Permission denied on volume',
-                  detail: 'Non-root container can’t write to mounted volume path.',
-                  fix: 'Chown the volume directory, run as correct UID/GID, or set ownership during container init. Avoid “just run as root” as the default fix.'
-                },
-                {
-                  cause: 'Out of disk / inode exhaustion',
-                  detail: 'Docker can’t create layers or write logs when disk/inodes are full.',
-                  fix: 'Run: docker system df. Prune safely: docker system prune (careful). Add disk space. Check log growth.'
-                },
-              ],
-            },
-          ],
-        },
       },
+      {
+        fault: 'Process lifecycle',
+        icon: 'error',
+        causes: [
+          {
+            cause: 'PID 1 command exits',
+            detail: 'Containers stop when PID 1 exits — even “successfully.”',
+            fix: 'Check: docker logs <ctr>. Verify CMD/ENTRYPOINT. For servers, ensure the process stays in the foreground (no daemonize).'
+          },
+          {
+            cause: 'Signal handling / PID 1 quirks',
+            detail: 'PID 1 ignores some signals by default and can fail to reap zombies, causing weird shutdown behavior.',
+            fix: 'Prefer exec-form ENTRYPOINT/CMD. Consider a tiny init (e.g., tini) for long-running multi-process containers.'
+          },
+          {
+            cause: 'Entrypoint/CMD mismatch',
+            detail: 'Shell-form commands + quoting can change args; ENTRYPOINT + CMD composition can surprise you.',
+            fix: 'Inspect: docker image inspect <img> (Config.Entrypoint/Cmd). Prefer JSON exec-form and test the resolved command in an interactive shell.'
+          },
+          {
+            cause: 'Healthcheck failing (starts but “unhealthy”)',
+            detail: 'The process runs, but the healthcheck fails, so Compose/restarts/depends_on logic may behave as if it never started.',
+            fix: 'docker inspect <ctr> (State.Health) and logs. Validate the healthcheck command inside the container; increase timeouts if startup is slow.'
+          },
+        ],
+      },
+      {
+        fault: 'Runtime config & environment',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Missing/invalid env vars',
+            detail: 'App crashes on startup because required config is missing (DB URL, API keys, etc.).',
+            fix: 'Make config errors explicit at startup. In Compose, set env properly (env_file / environment). Confirm with: docker exec <ctr> env.'
+          },
+          {
+            cause: 'Mount hides required files',
+            detail: 'A bind mount over /app replaces what was in the image. Your start script or dependencies disappear.',
+            fix: 'Confirm mounts: docker inspect <ctr>. Avoid mounting over critical paths; mount subdirectories instead.'
+          },
+          {
+            cause: 'Wrong WORKDIR / relative paths',
+            detail: 'Your command assumes a working directory that is not set (or differs between build and run).',
+            fix: 'Check Dockerfile WORKDIR and your compose.yml working_dir. Validate paths in an interactive shell.'
+          },
+        ],
+      },
+      {
+        fault: 'Filesystem & permissions',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Permission denied on volume',
+            detail: 'Non-root container can’t write to mounted volume path.',
+            fix: 'Chown the host/volume directory or align container USER uid/gid. Avoid “just run as root” as the default fix.'
+          },
+          {
+            cause: 'Missing executable / wrong line endings',
+            detail: '“No such file or directory” can be a line-ending/shebang/exec-bit issue (especially on Windows).',
+            fix: 'Ensure scripts are LF, have a valid shebang, and are executable. Try: docker run -it --entrypoint sh <img> and ls -la the script.'
+          },
+          {
+            cause: 'Out of disk / inode exhaustion',
+            detail: 'Image layers, build cache, volumes, or logs can fill Docker’s storage even if the host looks fine.',
+            fix: 'docker system df  → docker system prune (careful). Also check volumes: docker volume ls; docker builder prune.'
+          },
+        ],
+      },
+      {
+        fault: 'Ports & host conflicts',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Port already in use on host',
+            detail: 'Publishing a host port fails or the service is unreachable because another process owns the port.',
+            fix: 'Change host port (-p 8081:80). Find offenders: lsof -i :8080 (host) or netstat. On Windows, use: netstat -ano | findstr :8080.'
+          },
+          {
+            cause: 'App bound to localhost inside container',
+            detail: 'Service listens only on 127.0.0.1 in the container; other containers (and sometimes the host) can’t reach it.',
+            fix: 'Configure app to bind to 0.0.0.0 (all interfaces). Confirm with ss/netstat inside the container.'
+          },
+        ],
+      },
+      {
+        fault: 'Architecture / platform',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Architecture mismatch (exec format error)',
+            detail: 'You built/pulled an image for a different CPU architecture than your runtime.',
+            fix: 'docker image inspect <img> (Architecture/Os). Rebuild with --platform or pull the correct variant.'
+          },
+        ],
+      },
+    ],
+  },
+},
+{
+  id: 'ft-02',
+  title: 'Can’t Connect',
+  type: 'faulttree',
+  why: 'Connection issues are usually “wrong address,” “wrong port,” “wrong network,” or “service not listening.” This tree separates host→container from container→container.',
+  pitfalls: [
+    'Mixing up host port vs container port (e.g., -p 8080:80).',
+    'Using localhost inside a container to reach another container.',
+    'Forgetting that Compose gives you DNS by service name.',
+  ],
+  content: {
+    root: 'Client can’t reach service (timeout / connection refused / DNS fail)',
+    branches: [
+      {
+        fault: 'Debug ladder (separate the hop)',
+        icon: 'info',
+        causes: [
+          {
+            cause: '1) Is the server actually running?',
+            detail: 'A network problem can look identical to a crashed app.',
+            fix: 'docker ps  → check status. Then: docker logs <server-ctr>.'
+          },
+          {
+            cause: '2) Identify the hop',
+            detail: 'Host→container is different from container→container.',
+            fix: 'From host: use localhost:<hostPort>. From another container: use <serviceName>:<containerPort> (no host port).'
+          },
+          {
+            cause: '3) Test from inside the network',
+            detail: 'Run a throwaway container on the same network to test DNS + routing.',
+            fix: 'docker run --rm -it --network <net> alpine sh  → apk add curl; curl http://service:port'
+          },
+        ],
+      },
+      {
+        fault: 'Wrong address / name',
+        icon: 'error',
+        causes: [
+          {
+            cause: 'Using localhost inside a container',
+            detail: 'Inside a container, localhost means “this container,” not the host or another service.',
+            fix: 'In Compose, connect to other services by service name (e.g., db:5432). To reach the host, use host.docker.internal (Docker Desktop).'
+          },
+          {
+            cause: 'DNS name doesn’t exist',
+            detail: 'Service discovery works on user-defined networks; legacy setups can behave differently.',
+            fix: 'Use Compose (default network) or create a user-defined network: docker network create mynet; run containers with --network mynet.'
+          },
+        ],
+      },
+      {
+        fault: 'Wrong port mapping',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Host port vs container port confusion',
+            detail: 'You published -p 8080:80 but try to reach 80 on the host, or 8080 inside the network.',
+            fix: 'Confirm: docker port <server-ctr>. Host uses the left side (8080). Containers use the container port (80).'
+          },
+          {
+            cause: 'Service listens on the wrong interface',
+            detail: 'If the app binds to 127.0.0.1 inside the container, other containers can’t reach it.',
+            fix: 'Bind to 0.0.0.0. Verify with ss/netstat in the container.'
+          },
+        ],
+      },
+      {
+        fault: 'Network wiring',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Containers not on same network',
+            detail: 'Routing + DNS need shared network attachment.',
+            fix: 'In Compose, ensure both services are on the same network. Otherwise attach explicitly via networks:'
+          },
+          {
+            cause: 'Firewall / VPN / corporate network oddities',
+            detail: 'Host networking can be blocked even if container networking is fine (or vice versa).',
+            fix: 'Test host→container and container→container separately. If container→container works but host→container fails, check host firewall/VPN rules.'
+          },
+        ],
+      },
+      {
+        fault: 'Upstream service not ready',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Depends-on isn’t readiness',
+            detail: 'Compose can start containers in order, but that doesn’t mean the DB is accepting connections yet.',
+            fix: 'Add retries/backoff in the app, or use a healthcheck + wait-for-it style gate for local dev.'
+          },
+        ],
+      },
+    ],
+  },
+},
 
+{
+  id: 'ft-03',
+  title: 'Out of Space',
+  type: 'faulttree',
+  why: '“Disk full” can mean the host disk, Docker’s VM disk image (Desktop), build cache, image layers, volumes, or logs. This tree narrows it fast.',
+  pitfalls: [
+    'Pruning blindly and deleting volumes that contain your data.',
+    'Assuming host free space means Docker has free space (Desktop disk image can be capped).',
+    'Ignoring logs as a storage source (json-file can grow forever).',
+  ],
+  content: {
+    root: 'Docker reports no space left (build fails / container errors / pulls fail)',
+    branches: [
       {
-        id: 'ft-02',
-        title: 'Can’t Connect to the Service',
-        type: 'faulttree',
-        why: "Connection problems are usually topology, not magic. This fault tree teaches you to locate the port *and* the namespace where it lives.",
-        pitfalls: [
-          "Using localhost between containers — it points back to the same container.",
-          "Confusing host-port vs container-port — you curl the wrong side.",
-          "Not binding the app to 0.0.0.0 — it listens only on loopback inside the container."
+        fault: 'Debug ladder (what is full?)',
+        icon: 'info',
+        causes: [
+          {
+            cause: '1) Measure Docker storage',
+            detail: 'Start with what Docker thinks is consuming space.',
+            fix: 'docker system df  (and: docker builder du if available)'
+          },
+          {
+            cause: '2) Identify category',
+            detail: 'Images, build cache, volumes, containers, or logs.',
+            fix: 'Images: docker image ls. Volumes: docker volume ls. Containers: docker ps -a.'
+          },
+          {
+            cause: '3) Clean safely',
+            detail: 'Prefer removing build cache and dangling images before touching volumes.',
+            fix: 'docker builder prune  → docker image prune  → only then consider docker volume prune (risk!).'
+          },
         ],
-        content: {
-          root: 'Client cannot connect (timeout / refused / DNS failure)',
-          branches: [
-            {
-              fault: 'Wrong address / port',
-              icon: 'error',
-              causes: [
-                {
-                  cause: 'Host vs container port confusion',
-                  detail: '“-p 8080:80” means host:8080 forwards to container:80. Curling host:80 will fail.',
-                  fix: 'From host: use host:8080. From another container on same network: use service-name:80 (no host port).'
-                },
-                {
-                  cause: 'App bound to localhost inside container',
-                  detail: 'Service listens only on 127.0.0.1 in the container; other containers can’t reach it.',
-                  fix: 'Configure app to bind to 0.0.0.0 (all interfaces). Confirm with netstat/ss inside the container.'
-                },
-              ],
-            },
-            {
-              fault: 'Network/DNS wiring',
-              icon: 'warning',
-              causes: [
-                {
-                  cause: 'Containers not on same network',
-                  detail: 'Service discovery and routing require shared network attachment.',
-                  fix: 'In Compose, ensure both services share the same default network. Otherwise, connect networks explicitly.'
-                },
-                {
-                  cause: 'DNS name doesn’t exist',
-                  detail: 'Service name resolution works on user-defined networks, not the legacy default bridge in all cases.',
-                  fix: 'Use Compose (user-defined network) or create one: docker network create mynet; run containers with --network mynet.'
-                },
-              ],
-            },
-            {
-              fault: 'Service not actually ready',
-              icon: 'info',
-              causes: [
-                {
-                  cause: 'Startup race (DB not ready yet)',
-                  detail: 'depends_on only orders container start, not readiness. App tries to connect too early.',
-                  fix: 'Add healthchecks + retry/backoff in app. Use wait-for-it scripts sparingly (retries are better).'
-                },
-                {
-                  cause: 'Firewall / security policy on host',
-                  detail: 'Host firewall blocks published port, or corporate security intercepts connections.',
-                  fix: 'Test locally with curl. Temporarily disable firewall rules (carefully) or allow the port.'
-                },
-              ],
-            },
-          ],
-        },
       },
-
       {
-        id: 'ft-03',
-        title: 'Out of Space (Disk / Layers / Volumes)',
-        type: 'faulttree',
-        why: "Docker storage failures feel random until you know what consumes space: images, layers, build cache, logs, and volumes. This tree gives you a quick “what to delete safely” map.",
-        pitfalls: [
-          "Blindly running prune in production — you might delete needed images and cause downtime on restart.",
-          "Forgetting volumes — images aren’t the only big thing; databases live in volumes.",
-          "Ignoring logs — runaway logs can fill disks even if images are small."
+        fault: 'Docker Desktop disk image is full',
+        icon: 'error',
+        causes: [
+          {
+            cause: 'VM disk cap hit',
+            detail: 'Docker Desktop stores data inside a virtual disk that can fill even when the host disk has room.',
+            fix: 'Docker Desktop settings: increase disk image size and/or prune images/build cache. Restart Docker Desktop after changes.'
+          },
         ],
-        content: {
-          root: 'Docker reports “no space left on device” / builds fail / containers can’t write',
-          branches: [
-            {
-              fault: 'Image & build cache bloat',
-              icon: 'warning',
-              causes: [
-                {
-                  cause: 'Too many unused images/layers',
-                  detail: 'Old tags and intermediate layers accumulate over time.',
-                  fix: 'Inspect: docker system df. Clean cautiously: docker image prune (unused). For deeper cleanup: docker system prune (understand what it removes).'
-                },
-                {
-                  cause: 'Build cache exploded',
-                  detail: 'Frequent builds create cache entries, especially with large contexts and frequent invalidation.',
-                  fix: 'Use .dockerignore, reorder Dockerfile for caching, and periodically clear build cache (Docker Desktop has UI; CLI varies by builder).'
-                },
-              ],
-            },
-            {
-              fault: 'Volumes & application data',
-              icon: 'error',
-              causes: [
-                {
-                  cause: 'Database volume grew',
-                  detail: 'Your DB accumulates data; the volume is doing its job… until the disk isn’t.',
-                  fix: 'Check volume size, vacuum/cleanup in DB, implement retention policies, move volume to larger disk.'
-                },
-                {
-                  cause: 'Bind mount points to small disk',
-                  detail: 'You mounted data to a host path that lives on a tiny filesystem.',
-                  fix: 'Move host directory to a larger partition/disk and remount. Confirm filesystem free space with df -h.'
-                },
-              ],
-            },
-            {
-              fault: 'Logs and temp files',
-              icon: 'info',
-              causes: [
-                {
-                  cause: 'Container logs unbounded',
-                  detail: 'Default json-file logging can grow without limit, filling disk.',
-                  fix: 'Configure log rotation (daemon.json) or use a logging driver. Prune old logs carefully.'
-                },
-                {
-                  cause: 'Tmp files in writable layer',
-                  detail: 'Apps that write lots of temp data to container filesystem grow the writable layer.',
-                  fix: 'Use tmpfs for temp, write to volumes, and clean temp directories.'
-                },
-              ],
-            },
-          ],
-        },
       },
+      {
+        fault: 'Build cache / layers exploded',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Layer cache growth',
+            detail: 'Repeated builds create lots of cached layers.',
+            fix: 'docker builder prune  (optionally: --all). Then improve caching: order Dockerfile steps and use .dockerignore.'
+          },
+          {
+            cause: 'Copying too much into the image',
+            detail: 'Large build context or accidental COPY of node_modules, .git, or artifacts.',
+            fix: 'Add .dockerignore. Inspect: docker history <img> to see where size comes from.'
+          },
+        ],
+      },
+      {
+        fault: 'Volumes growing silently',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Database / app data growth',
+            detail: 'Named volumes persist and can grow without you noticing.',
+            fix: 'List volumes: docker volume ls. Inspect mounts: docker inspect <ctr>. Decide retention and add cleanup/rotation where appropriate.'
+          },
+        ],
+      },
+      {
+        fault: 'Logs ballooning',
+        icon: 'warning',
+        causes: [
+          {
+            cause: 'Container logs unbounded',
+            detail: 'Default json-file logging can grow indefinitely.',
+            fix: 'Configure log rotation (max-size/max-file) in Docker daemon settings or compose logging options. Also reduce noisy logging in dev.'
+          },
+        ],
+      },
+    ],
+  },
+},
     ],
   },
 };
